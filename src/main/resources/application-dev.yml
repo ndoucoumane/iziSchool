@@ -1,0 +1,50 @@
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/izischool_db}
+    username: ${DB_USERNAME:izischool_user}
+    password: ${DB_PASSWORD:izischool_secret_password}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      idle-timeout: 30000
+      pool-name: IziSchoolHikariCP
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          time_zone: UTC
+    open-in-view: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+    validate-on-migrate: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 3000ms
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8085/realms/izischool}
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:8085/realms/izischool/protocol/openid-connect/certs}
+
+logging:
+  level:
+    root: INFO
+    com.izischool: INFO
+    org.springframework.security: WARN
+    org.springframework.orm.jpa: WARN
+    org.springframework.data.repository.config: WARN
+    org.springframework.data.redis: WARN
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql: WARN
+    org.hibernate.engine.transaction.internal.TransactionImpl: WARN

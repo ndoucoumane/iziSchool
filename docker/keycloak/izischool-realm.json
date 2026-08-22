@@ -1,0 +1,56 @@
+{
+  "realm": "izischool",
+  "enabled": true,
+  "displayName": "iziSchool Platform",
+  "sslRequired": "external",
+  "roles": {
+    "realm": [
+      {
+        "name": "ROLE_SUPER_ADMIN",
+        "description": "SaaS Platform Global Administrator"
+      },
+      {
+        "name": "ROLE_DIRECTOR",
+        "description": "School Director"
+      },
+      {
+        "name": "ROLE_ADMIN",
+        "description": "School Administrator"
+      },
+      {
+        "name": "ROLE_ACCOUNTANT",
+        "description": "School Accountant / Bursar"
+      },
+      {
+        "name": "ROLE_PARENT",
+        "description": "Student Parent / Guardian"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "izischool-api",
+      "name": "iziSchool Backend API",
+      "enabled": true,
+      "publicClient": false,
+      "bearerOnly": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true
+    },
+    {
+      "clientId": "izischool-frontend",
+      "name": "iziSchool Frontend App",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "http://localhost:5173/*"
+      ],
+      "webOrigins": [
+        "*"
+      ]
+    }
+  ]
+}
