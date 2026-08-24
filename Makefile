@@ -45,9 +45,9 @@ test: ## Exécute l'ensemble des tests du projet (unitaires & intégration)
 	@echo "\033[1;32mExécution de la suite de tests...\033[0m"
 	mvn test
 
-test-unit: ## Exécute uniquement les tests unitaires des services métier
+test-unit: ## Exécute uniquement les tests unitaires des services et contrôleurs métier
 	@echo "\033[1;32mExécution des tests unitaires métier...\033[0m"
-	mvn test -Dtest=*ServiceTest
+	mvn test -Dtest=*ServiceTest,*ApiControllersTest,*ValidationServiceTest
 
 test-it: ## Exécute uniquement les tests d'intégration
 	@echo "\033[1;32mExécution des tests d'intégration...\033[0m"

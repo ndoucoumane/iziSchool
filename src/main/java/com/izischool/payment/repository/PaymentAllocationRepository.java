@@ -19,4 +19,11 @@ public interface PaymentAllocationRepository extends JpaRepository<PaymentAlloca
 
     @Query("SELECT COALESCE(SUM(pa.amount), 0) FROM PaymentAllocation pa WHERE pa.paymentSchedule.id = :scheduleId")
     BigDecimal sumAllocatedAmountByScheduleId(@Param("scheduleId") UUID scheduleId);
+
+    @Query("SELECT pa FROM PaymentAllocation pa " +
+           "JOIN FETCH pa.paymentSchedule ps " +
+           "JOIN FETCH ps.fee f " +
+           "JOIN FETCH pa.payment p " +
+           "WHERE ps.school.id = :schoolId AND p.status = 'SUCCESS' AND p.deleted = false")
+    List<PaymentAllocation> findAllSuccessfulAllocationsWithFeeBySchoolId(@Param("schoolId") UUID schoolId);
 }

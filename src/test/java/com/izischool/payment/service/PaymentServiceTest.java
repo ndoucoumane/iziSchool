@@ -17,9 +17,12 @@ import com.izischool.payment.repository.PaymentAllocationRepository;
 import com.izischool.payment.repository.PaymentRepository;
 import com.izischool.school.domain.School;
 import com.izischool.school.domain.SchoolStatus;
+import com.izischool.academic.repository.AcademicYearRepository;
+import com.izischool.finance.repository.FeeRepository;
 import com.izischool.student.domain.Gender;
 import com.izischool.student.domain.Student;
 import com.izischool.student.domain.StudentStatus;
+import com.izischool.student.repository.StudentEnrollmentRepository;
 import com.izischool.tenant.service.TenantValidationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -55,6 +58,15 @@ class PaymentServiceTest {
 
     @Mock
     private StudentParentRepository studentParentRepository;
+
+    @Mock
+    private StudentEnrollmentRepository studentEnrollmentRepository;
+
+    @Mock
+    private FeeRepository feeRepository;
+
+    @Mock
+    private AcademicYearRepository academicYearRepository;
 
     @Mock
     private ReceiptService receiptService;

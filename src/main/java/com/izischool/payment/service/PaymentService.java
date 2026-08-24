@@ -22,9 +22,20 @@ import com.izischool.payment.domain.PaymentMethod;
 import com.izischool.payment.domain.PaymentProvider;
 import com.izischool.payment.domain.PaymentStatus;
 import com.izischool.payment.domain.Receipt;
+import com.izischool.payment.domain.ReceiptStatus;
 import com.izischool.payment.repository.PaymentAllocationRepository;
 import com.izischool.payment.repository.PaymentRepository;
+import com.izischool.payment.repository.ReceiptRepository;
+import com.izischool.academic.domain.AcademicYear;
+import com.izischool.academic.domain.AcademicYearStatus;
+import com.izischool.academic.repository.AcademicYearRepository;
+import com.izischool.finance.domain.Fee;
+import com.izischool.finance.domain.FeeType;
+import com.izischool.finance.repository.FeeRepository;
+import com.izischool.student.domain.EnrollmentStatus;
 import com.izischool.student.domain.Student;
+import com.izischool.student.domain.StudentEnrollment;
+import com.izischool.student.repository.StudentEnrollmentRepository;
 import com.izischool.tenant.service.TenantValidationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,6 +62,10 @@ public class PaymentService {
     private final PaymentAllocationRepository paymentAllocationRepository;
     private final PaymentScheduleRepository paymentScheduleRepository;
     private final StudentParentRepository studentParentRepository;
+    private final StudentEnrollmentRepository studentEnrollmentRepository;
+    private final FeeRepository feeRepository;
+    private final AcademicYearRepository academicYearRepository;
+    private final ReceiptRepository receiptRepository;
     private final ReceiptService receiptService;
     private final AuditService auditService;
     private final NotificationService notificationService;
@@ -181,12 +196,91 @@ public class PaymentService {
             }
 
             if (MoneyUtils.isPositive(unallocatedAmount)) {
-                // Payment exceeds total unpaid schedules
-                log.warn("Payment {} of {} exceeds total pending schedules by {}",
-                        savedPayment.getPaymentReference(), savedPayment.getAmount(), unallocatedAmount);
-                throw new PaymentException(String.format(
-                        "Payment amount [%s] exceeds total pending balance by [%s]",
-                        savedPayment.getAmount(), unallocatedAmount));
+                // If student has no scheduled fees (e.g. registered without prior schedule generation),
+                // auto-create an ad-hoc schedule so that payments entered by cashiers/directors succeed seamlessly
+                List<com.izischool.student.domain.StudentEnrollment> enrollments = studentEnrollmentRepository.findBySchool_Id(savedPayment.getSchool().getId());
+                Optional<com.izischool.student.domain.StudentEnrollment> enrollmentOpt = enrollments.stream()
+                        .filter(e -> e.getStudent() != null && e.getStudent().getId().equals(savedPayment.getStudent().getId()))
+                        .filter(e -> e.getStatus() != com.izischool.student.domain.EnrollmentStatus.CANCELLED)
+                        .findFirst();
+
+                AcademicYear year = enrollmentOpt.map(com.izischool.student.domain.StudentEnrollment::getAcademicYear).orElse(null);
+                if (year == null) {
+                    year = academicYearRepository.findBySchool_IdAndStatus(savedPayment.getSchool().getId(), AcademicYearStatus.ACTIVE)
+                            .orElseGet(() -> {
+                                List<AcademicYear> years = academicYearRepository.findBySchool_IdOrderByStartDateDesc(savedPayment.getSchool().getId());
+                                return years.isEmpty() ? null : years.get(0);
+                            });
+                }
+
+                Fee fee = null;
+                if (year != null) {
+                    List<Fee> tuitionFees = feeRepository.findBySchool_IdAndAcademicYear_IdAndFeeTypeAndActiveTrue(
+                            savedPayment.getSchool().getId(), year.getId(), FeeType.TUITION);
+                    if (!tuitionFees.isEmpty()) {
+                        fee = tuitionFees.get(0);
+                    } else {
+                        fee = feeRepository.save(Fee.builder()
+                                .school(savedPayment.getSchool())
+                                .academicYear(year)
+                                .name("Frais de scolarité")
+                                .code("SCOL-" + (System.currentTimeMillis() % 10000))
+                                .amount(unallocatedAmount)
+                                .currency(savedPayment.getCurrency() != null ? savedPayment.getCurrency() : "XOF")
+                                .feeType(FeeType.TUITION)
+                                .active(true)
+                                .mandatory(true)
+                                .build());
+                    }
+                }
+
+                com.izischool.student.domain.StudentEnrollment enrollment = enrollmentOpt.orElse(null);
+                if (enrollment == null && year != null) {
+                    enrollment = studentEnrollmentRepository.save(com.izischool.student.domain.StudentEnrollment.builder()
+                            .school(savedPayment.getSchool())
+                            .student(savedPayment.getStudent())
+                            .academicYear(year)
+                            .enrollmentDate(today)
+                            .status(com.izischool.student.domain.EnrollmentStatus.ACTIVE)
+                            .build());
+                }
+
+                if (enrollment != null && fee != null) {
+                    PaymentSchedule autoSchedule = PaymentSchedule.builder()
+                            .school(savedPayment.getSchool())
+                            .student(savedPayment.getStudent())
+                            .enrollment(enrollment)
+                            .fee(fee)
+                            .dueDate(today)
+                            .amountDue(unallocatedAmount)
+                            .amountPaid(unallocatedAmount)
+                            .remainingAmount(BigDecimal.ZERO)
+                            .currency(savedPayment.getCurrency() != null ? savedPayment.getCurrency() : "XOF")
+                            .status(PaymentScheduleStatus.PAID)
+                            .installmentNumber(1)
+                            .description(savedPayment.getDescription() != null && !savedPayment.getDescription().isBlank()
+                                    ? savedPayment.getDescription()
+                                    : "Règlement scolarité")
+                            .build();
+
+                    PaymentSchedule savedAutoSchedule = paymentScheduleRepository.save(autoSchedule);
+
+                    PaymentAllocation autoAllocation = PaymentAllocation.builder()
+                            .payment(savedPayment)
+                            .paymentSchedule(savedAutoSchedule)
+                            .amount(unallocatedAmount)
+                            .build();
+
+                    allocations.add(autoAllocation);
+                    log.info("Auto-created payment schedule {} for unallocated amount {} of student {}",
+                            savedAutoSchedule.getId(), unallocatedAmount, savedPayment.getStudent().getStudentNumber());
+                } else {
+                    log.warn("Payment {} of {} exceeds total pending schedules by {}",
+                            savedPayment.getPaymentReference(), savedPayment.getAmount(), unallocatedAmount);
+                    throw new PaymentException(String.format(
+                            "Payment amount [%s] exceeds total pending balance by [%s]",
+                            savedPayment.getAmount(), unallocatedAmount));
+                }
             }
         }
 
@@ -265,5 +359,57 @@ public class PaymentService {
     public Page<Payment> getPaymentsBySchool(UUID schoolId, Pageable pageable) {
         tenantValidationService.validateSchoolAccess(schoolId);
         return paymentRepository.findBySchool_IdAndDeletedFalse(schoolId, pageable);
+    }
+
+    /**
+     * Cancels an existing payment, reverses schedule allocations, and updates receipts.
+     */
+    @Transactional
+    public Payment cancelPayment(UUID paymentId, UUID schoolId, String reason) {
+        tenantValidationService.validateSchoolAccess(schoolId);
+        Payment payment = getPaymentById(paymentId, schoolId);
+
+        if (payment.getStatus() == PaymentStatus.CANCELLED) {
+            throw new PaymentException("Payment is already cancelled");
+        }
+
+        // 1. Revert Allocations
+        List<PaymentAllocation> allocations = paymentAllocationRepository.findByPayment_Id(payment.getId());
+        LocalDate today = LocalDate.now();
+
+        for (PaymentAllocation allocation : allocations) {
+            PaymentSchedule schedule = allocation.getPaymentSchedule();
+            schedule.setAmountPaid(schedule.getAmountPaid().subtract(allocation.getAmount()));
+            schedule.recalculateStatus(today);
+            paymentScheduleRepository.save(schedule);
+        }
+
+        // 2. Update Payment Status
+        payment.setStatus(PaymentStatus.CANCELLED);
+        payment.setDescription(payment.getDescription() != null
+                ? payment.getDescription() + " | Annulé: " + reason
+                : "Annulé: " + reason);
+        Payment savedPayment = paymentRepository.save(payment);
+
+        // 3. Cancel Receipt
+        receiptRepository.findByPayment_Id(payment.getId()).ifPresent(receipt -> {
+            receipt.setStatus(ReceiptStatus.CANCELLED);
+            receiptRepository.save(receipt);
+        });
+
+        // 4. Audit Log
+        auditService.logAction(
+                payment.getSchool(),
+                null,
+                AuditAction.UPDATE,
+                "Payment",
+                payment.getId().toString(),
+                null,
+                String.format("Payment %s cancelled. Reason: %s", payment.getPaymentReference(), reason),
+                null,
+                null
+        );
+
+        return savedPayment;
     }
 }

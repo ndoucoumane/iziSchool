@@ -25,7 +25,7 @@ public class JwtAuthConverter implements Converter<Jwt, AbstractAuthenticationTo
 
     private final JwtGrantedAuthoritiesConverter defaultAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
 
-    @Value("${izischool.security.jwt.client-id:izischool-api}")
+    @Value("${izischool.security.jwt.client-id:izischool-backend}")
     private String clientId;
 
     @Override
@@ -48,7 +48,8 @@ public class JwtAuthConverter implements Converter<Jwt, AbstractAuthenticationTo
         if (realmAccess != null && realmAccess.containsKey("roles")) {
             Collection<String> roles = (Collection<String>) realmAccess.get("roles");
             roles.stream()
-                    .map(role -> new SimpleGrantedAuthority("ROLE_" + role.toUpperCase()))
+                    .map(role -> role.toUpperCase().startsWith("ROLE_") ? role.toUpperCase() : "ROLE_" + role.toUpperCase())
+                    .map(SimpleGrantedAuthority::new)
                     .forEach(authorities::add);
         }
 
@@ -59,7 +60,8 @@ public class JwtAuthConverter implements Converter<Jwt, AbstractAuthenticationTo
             if (clientResource != null && clientResource.containsKey("roles")) {
                 Collection<String> roles = (Collection<String>) clientResource.get("roles");
                 roles.stream()
-                        .map(role -> new SimpleGrantedAuthority("ROLE_" + role.toUpperCase()))
+                        .map(role -> role.toUpperCase().startsWith("ROLE_") ? role.toUpperCase() : "ROLE_" + role.toUpperCase())
+                        .map(SimpleGrantedAuthority::new)
                         .forEach(authorities::add);
             }
         }

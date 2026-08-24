@@ -5,6 +5,7 @@ import com.izischool.common.exception.ResourceNotFoundException;
 import com.izischool.common.util.MoneyUtils;
 import com.izischool.finance.domain.Fee;
 import com.izischool.finance.domain.FeeAssignment;
+import com.izischool.finance.domain.FeeType;
 import com.izischool.finance.repository.FeeAssignmentRepository;
 import com.izischool.finance.repository.FeeRepository;
 import com.izischool.tenant.service.TenantValidationService;
@@ -17,6 +18,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -61,10 +63,44 @@ public class FeeService {
         return feeRepository.findBySchool_IdAndAcademicYear_IdAndActiveTrue(schoolId, academicYearId);
     }
 
-    /**
-     * Resolves the effective amount for a fee given a class and grade level.
-     * Priority: SchoolClass assignment > GradeLevel assignment > Fee base amount.
-     */
+    @Transactional(readOnly = true)
+    public List<Fee> getFeesFiltered(UUID schoolId, UUID academicYearId, FeeType type, Boolean active) {
+        tenantValidationService.validateSchoolAccess(schoolId);
+        List<Fee> list = (academicYearId != null)
+                ? (active != null && active
+                ? feeRepository.findBySchool_IdAndAcademicYear_IdAndActiveTrue(schoolId, academicYearId)
+                : feeRepository.findBySchool_IdAndAcademicYear_Id(schoolId, academicYearId))
+                : feeRepository.findBySchool_Id(schoolId);
+
+        return list.stream()
+                .filter(f -> type == null || f.getFeeType() == type)
+                .filter(f -> active == null || f.isActive() == active)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public Fee updateFee(UUID id, UUID schoolId, Fee updatedData) {
+        tenantValidationService.validateSchoolAccess(schoolId);
+        Fee fee = getFeeById(id, schoolId);
+
+        if (updatedData.getName() != null) fee.setName(updatedData.getName());
+        if (updatedData.getAmount() != null) fee.setAmount(MoneyUtils.scale(updatedData.getAmount()));
+        if (updatedData.getDescription() != null) fee.setDescription(updatedData.getDescription());
+        if (updatedData.getFeeType() != null) fee.setFeeType(updatedData.getFeeType());
+        fee.setMandatory(updatedData.isMandatory());
+
+        return feeRepository.save(fee);
+    }
+
+    @Transactional
+    public Fee toggleFeeStatus(UUID id, UUID schoolId, boolean active) {
+        tenantValidationService.validateSchoolAccess(schoolId);
+        Fee fee = getFeeById(id, schoolId);
+        fee.setActive(active);
+        log.info("Set fee {} active={}", fee.getName(), active);
+        return feeRepository.save(fee);
+    }
+
     @Transactional(readOnly = true)
     public BigDecimal resolveEffectiveFeeAmount(UUID schoolId, UUID feeId, UUID gradeLevelId, UUID classId) {
         tenantValidationService.validateSchoolAccess(schoolId);

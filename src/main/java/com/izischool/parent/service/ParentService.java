@@ -1,5 +1,6 @@
 package com.izischool.parent.service;
 
+import com.izischool.common.exception.ConflictException;
 import com.izischool.common.exception.ResourceNotFoundException;
 import com.izischool.parent.domain.Parent;
 import com.izischool.parent.domain.ParentRelationship;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -31,9 +33,24 @@ public class ParentService {
     @Transactional
     public Parent createParent(Parent parent) {
         tenantValidationService.validateEntityAccess(parent);
+        UUID schoolId = parent.getSchool().getId();
+
+        if (parent.getPhone() != null && !parent.getPhone().isBlank()) {
+            if (parentRepository.existsBySchool_IdAndPhoneAndDeletedFalse(schoolId, parent.getPhone())) {
+                throw new ConflictException(String.format("Parent with phone [%s] already exists in this school", parent.getPhone()));
+            }
+        }
+
+        if (parent.getEmail() != null && !parent.getEmail().isBlank()) {
+            if (parentRepository.existsBySchool_IdAndEmailAndDeletedFalse(schoolId, parent.getEmail())) {
+                throw new ConflictException(String.format("Parent with email [%s] already exists in this school", parent.getEmail()));
+            }
+        }
+
         if (parent.getStatus() == null) {
             parent.setStatus(ParentStatus.ACTIVE);
         }
+
         return parentRepository.save(parent);
     }
 
@@ -43,25 +60,25 @@ public class ParentService {
             Parent parent,
             ParentRelationship relationship,
             boolean isFinancialContact,
-            boolean isPrimary
+            boolean isEmergencyContact
     ) {
         tenantValidationService.validateEntityAccess(student);
         tenantValidationService.validateEntityAccess(parent);
 
-        return studentParentRepository.findByStudent_IdAndParent_Id(student.getId(), parent.getId())
-                .orElseGet(() -> {
-                    StudentParent link = StudentParent.builder()
-                            .student(student)
-                            .parent(parent)
-                            .relationship(relationship)
-                            .isFinancialContact(isFinancialContact)
-                            .isPrimary(isPrimary)
-                            .build();
-                    StudentParent saved = studentParentRepository.save(link);
-                    log.info("Linked student {} to parent {} (relationship={}, isFinancialContact={})",
-                            student.getStudentNumber(), parent.getFullName(), relationship, isFinancialContact);
-                    return saved;
-                });
+        if (studentParentRepository.existsByStudent_IdAndParent_Id(student.getId(), parent.getId())) {
+            throw new ConflictException(String.format("Parent [%s] is already linked to student [%s]",
+                    parent.getFullName(), student.getFullName()));
+        }
+
+        StudentParent link = StudentParent.builder()
+                .student(student)
+                .parent(parent)
+                .relationship(relationship)
+                .isFinancialContact(isFinancialContact)
+                .isEmergencyContact(isEmergencyContact)
+                .build();
+
+        return studentParentRepository.save(link);
     }
 
     @Transactional(readOnly = true)
@@ -78,8 +95,28 @@ public class ParentService {
     }
 
     @Transactional(readOnly = true)
-    public List<StudentParent> getParentsForStudent(UUID studentId, UUID schoolId) {
+    public List<Student> getStudentsForParent(UUID parentId, UUID schoolId) {
         tenantValidationService.validateSchoolAccess(schoolId);
-        return studentParentRepository.findByStudent_Id(studentId);
+        List<StudentParent> links = studentParentRepository.findByParent_Id(parentId);
+        return links.stream()
+                .map(StudentParent::getStudent)
+                .filter(s -> !s.isDeleted())
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public Parent updateParent(UUID id, UUID schoolId, Parent updatedData) {
+        tenantValidationService.validateSchoolAccess(schoolId);
+        Parent parent = getParentById(id, schoolId);
+
+        if (updatedData.getFirstName() != null) parent.setFirstName(updatedData.getFirstName());
+        if (updatedData.getLastName() != null) parent.setLastName(updatedData.getLastName());
+        if (updatedData.getPhone() != null) parent.setPhone(updatedData.getPhone());
+        if (updatedData.getWhatsappPhone() != null) parent.setWhatsappPhone(updatedData.getWhatsappPhone());
+        if (updatedData.getEmail() != null) parent.setEmail(updatedData.getEmail());
+        if (updatedData.getAddress() != null) parent.setAddress(updatedData.getAddress());
+        if (updatedData.getStatus() != null) parent.setStatus(updatedData.getStatus());
+
+        return parentRepository.save(parent);
     }
 }

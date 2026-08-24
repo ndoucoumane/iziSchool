@@ -26,6 +26,8 @@ public interface UserProfileRepository extends JpaRepository<UserProfile, UUID> 
 
     Page<UserProfile> findBySchool_IdAndRoleAndDeletedFalse(UUID schoolId, UserRole role, Pageable pageable);
 
+    java.util.List<UserProfile> findBySchool_IdAndRoleIn(UUID schoolId, java.util.Collection<UserRole> roles);
+
     boolean existsByKeycloakUserId(String keycloakUserId);
 
     boolean existsByEmail(String email);

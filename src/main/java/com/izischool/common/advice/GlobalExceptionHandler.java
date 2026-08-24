@@ -113,14 +113,87 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
     }
 
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResourceFoundException(org.springframework.web.servlet.resource.NoResourceFoundException ex, HttpServletRequest request) {
+        log.warn("404 Resource/Endpoint Not Found: {} on path {}", ex.getResourcePath(), request.getRequestURI());
+        ErrorResponse response = ErrorResponse.builder()
+                .timestamp(Instant.now())
+                .status(HttpStatus.NOT_FOUND.value())
+                .code("ENDPOINT_NOT_FOUND")
+                .message("L'endpoint demandé n'a pas été trouvé. Vérifiez l'URL (le préfixe obligatoire est '/api/v1', ex: http://localhost:8081/api/v1/users) et la méthode HTTP.")
+                .path(request.getRequestURI())
+                .build();
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+    }
+
+    @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(org.springframework.web.HttpRequestMethodNotSupportedException ex, HttpServletRequest request) {
+        log.warn("405 Method Not Supported: {} on path {}", ex.getMethod(), request.getRequestURI());
+        ErrorResponse response = ErrorResponse.builder()
+                .timestamp(Instant.now())
+                .status(HttpStatus.METHOD_NOT_ALLOWED.value())
+                .code("METHOD_NOT_ALLOWED")
+                .message(String.format("La méthode HTTP '%s' n'est pas supportée pour cette URL. Méthodes autorisées: %s", ex.getMethod(), ex.getSupportedHttpMethods()))
+                .path(request.getRequestURI())
+                .build();
+
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(response);
+    }
+
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(org.springframework.http.converter.HttpMessageNotReadableException ex, HttpServletRequest request) {
+        log.warn("400 Bad Request JSON malformé: {}", ex.getMessage());
+        ErrorResponse response = ErrorResponse.builder()
+                .timestamp(Instant.now())
+                .status(HttpStatus.BAD_REQUEST.value())
+                .code("MALFORMED_JSON_REQUEST")
+                .message("Le corps de la requête (JSON body) est manquant, malformé ou contient une valeur invalide (ex: rôle incorrect ou enum inconnu).")
+                .path(request.getRequestURI())
+                .build();
+
+        return ResponseEntity.badRequest().body(response);
+    }
+
+    @ExceptionHandler(org.springframework.web.HttpMediaTypeNotAcceptableException.class)
+    public ResponseEntity<ErrorResponse> handleMediaTypeNotAcceptable(org.springframework.web.HttpMediaTypeNotAcceptableException ex, HttpServletRequest request) {
+        log.warn("406 Not Acceptable: {} on path {}", ex.getMessage(), request.getRequestURI());
+        ErrorResponse response = ErrorResponse.builder()
+                .timestamp(Instant.now())
+                .status(HttpStatus.NOT_ACCEPTABLE.value())
+                .code("MEDIA_TYPE_NOT_ACCEPTABLE")
+                .message("Le type de contenu demandé (en-tête Accept) n'est pas supporté pour cet endpoint.")
+                .path(request.getRequestURI())
+                .build();
+
+        return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .body(response);
+    }
+
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException ex, HttpServletRequest request) {
+        log.warn("400 Bad Request Type Mismatch: parameter '{}' with value '{}'", ex.getName(), ex.getValue());
+        ErrorResponse response = ErrorResponse.builder()
+                .timestamp(Instant.now())
+                .status(HttpStatus.BAD_REQUEST.value())
+                .code("INVALID_PARAMETER_FORMAT")
+                .message(String.format("Le paramètre '%s' avec la valeur '%s' n'a pas le format attendu (%s).",
+                        ex.getName(), ex.getValue(), ex.getRequiredType() != null ? ex.getRequiredType().getSimpleName() : "invalide"))
+                .path(request.getRequestURI())
+                .build();
+
+        return ResponseEntity.badRequest().body(response);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(Exception ex, HttpServletRequest request) {
-        log.error("Unhandled internal server error: ", ex);
+        log.error("Internal server error on {}: {}", request.getRequestURI(), ex.getMessage(), ex);
         ErrorResponse response = ErrorResponse.builder()
                 .timestamp(Instant.now())
                 .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
                 .code("INTERNAL_SERVER_ERROR")
-                .message("An unexpected error occurred. Please contact support.")
+                .message("Une erreur interne inattendue s'est produite: " + ex.getMessage())
                 .path(request.getRequestURI())
                 .build();
 

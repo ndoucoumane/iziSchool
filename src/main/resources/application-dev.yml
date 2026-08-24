@@ -34,8 +34,8 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8085/realms/izischool}
-          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:8085/realms/izischool/protocol/openid-connect/certs}
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8180/realms/iziSchool}
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:8180/realms/iziSchool/protocol/openid-connect/certs}
 
 logging:
   level:

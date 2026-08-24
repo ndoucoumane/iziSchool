@@ -39,8 +39,12 @@ public class ReceiptService {
             }
         }
 
-        long count = receiptRepository.countBySchool_Id(schoolId);
-        String receiptNumber = ReferenceGenerator.generateReceiptNumber(payment.getSchool().getCode(), count + 1);
+        long sequence = receiptRepository.countBySchool_Id(schoolId) + 1;
+        String schoolCode = payment.getSchool().getCode();
+        String receiptNumber;
+        do {
+            receiptNumber = ReferenceGenerator.generateReceiptNumber(schoolCode, sequence++);
+        } while (receiptRepository.existsBySchool_IdAndReceiptNumber(schoolId, receiptNumber));
 
         Receipt receipt = Receipt.builder()
                 .school(payment.getSchool())
@@ -62,6 +66,22 @@ public class ReceiptService {
         tenantValidationService.validateSchoolAccess(schoolId);
         return receiptRepository.findByIdAndSchool_IdAndDeletedFalse(id, schoolId)
                 .orElseThrow(() -> new ResourceNotFoundException("Receipt", id));
+    }
+
+    @Transactional(readOnly = true)
+    public Receipt getReceiptByIdOrNumber(String identifier, UUID schoolId) {
+        tenantValidationService.validateSchoolAccess(schoolId);
+        try {
+            UUID id = UUID.fromString(identifier);
+            Optional<Receipt> byId = receiptRepository.findByIdAndSchool_IdAndDeletedFalse(id, schoolId);
+            if (byId.isPresent()) {
+                return byId.get();
+            }
+        } catch (IllegalArgumentException ignored) {
+        }
+
+        return receiptRepository.findBySchool_IdAndReceiptNumber(schoolId, identifier)
+                .orElseThrow(() -> new ResourceNotFoundException("Receipt", identifier));
     }
 
     @Transactional(readOnly = true)

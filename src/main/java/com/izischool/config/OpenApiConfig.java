@@ -17,12 +17,14 @@ import java.util.List;
 @Configuration
 public class OpenApiConfig {
 
-    @Value("${server.servlet.context-path:/api/v1}")
+    @Value("${server.servlet.context-path:/}")
     private String contextPath;
 
     @Bean
     public OpenAPI iziSchoolOpenAPI() {
         final String securitySchemeName = "BearerAuth";
+
+        String baseUrl = (contextPath == null || contextPath.isBlank() || contextPath.equals("/")) ? "/" : contextPath;
 
         return new OpenAPI()
                 .info(new Info()
@@ -34,7 +36,7 @@ public class OpenApiConfig {
                                 .email("contact@izischool.com"))
                         .license(new License().name("Proprietary")))
                 .servers(List.of(
-                        new Server().url(contextPath).description("API Base URL")
+                        new Server().url(baseUrl).description("API Base URL")
                 ))
                 .addSecurityItem(new SecurityRequirement().addList(securitySchemeName))
                 .components(new Components()

@@ -58,6 +58,20 @@ public class SchoolService {
     }
 
     @Transactional
+    @CacheEvict(value = "school_info", key = "#school.id")
+    public School updateSchool(School school) {
+        if (!schoolRepository.existsById(school.getId())) {
+            throw new ResourceNotFoundException("School", school.getId());
+        }
+        School existing = getSchoolById(school.getId());
+        if (!existing.getCode().equalsIgnoreCase(school.getCode()) && schoolRepository.existsByCode(school.getCode())) {
+            throw new ConflictException(String.format("School with code [%s] already exists", school.getCode()));
+        }
+        log.info("Updated school tenant: {} ({})", school.getName(), school.getCode());
+        return schoolRepository.save(school);
+    }
+
+    @Transactional
     @CacheEvict(value = "school_info", key = "#id")
     public School updateSchoolStatus(UUID id, SchoolStatus status) {
         School school = getSchoolById(id);

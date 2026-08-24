@@ -21,5 +21,9 @@ public interface ParentRepository extends JpaRepository<Parent, UUID> {
 
     Optional<Parent> findBySchool_IdAndPhoneAndDeletedFalse(UUID schoolId, String phone);
 
+    boolean existsBySchool_IdAndPhoneAndDeletedFalse(UUID schoolId, String phone);
+
     Optional<Parent> findBySchool_IdAndEmailAndDeletedFalse(UUID schoolId, String email);
+
+    boolean existsBySchool_IdAndEmailAndDeletedFalse(UUID schoolId, String email);
 }
